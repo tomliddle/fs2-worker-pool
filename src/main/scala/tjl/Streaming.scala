@@ -3,7 +3,10 @@ package tjl
 import cats.Id
 import cats.effect.{Async, IO, IOApp}
 import fs2.*
-import cats.effect.unsafe.implicits.global
+import org.slf4j.LoggerFactory
+
+import scala.concurrent.ExecutionContext
+//import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, IOApp}
 import fs2.io.file.*
 import fs2.{Stream, text}
@@ -14,33 +17,40 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 import cats.effect.kernel.Sync
 
 
-trait LazyLogging[F[_]: Sync] {
-  implicit val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+trait LazyLogging[F[_]: Sync](lc: ExecutionContext) {
+  val logger = LoggerFactory.getLogger(getClass)
+
+  def print(str: String): IO[Unit] = IO(println(str)).evalOn(lc)
 }
 
-class Streaming[F[_]: Sync] extends LazyLogging[F] {
+class Streaming[F[_]: Sync](lc: ExecutionContext) extends LazyLogging[F](lc) {
 
-  val workerCount = 50
+  val workerCount = 20
 
-  def stream: Stream[IO, (Int, Int)] = {
-    val task = TaskImpl[IO]()
+  sealed trait Event
+  case class Result(value: String) extends Event
+  case object Tick extends Event
+
+  sealed trait Count {
+    def int: Int
+  }
+  case class Completed(int: Int) extends Count
+  case class Partial(int: Int) extends Count
+
+  def stream: Stream[IO, Int] = {
+
+    def task = TaskImpl[IO]()
 
     val stream: Stream[IO, Task[IO]] = Stream.constant(task).covary[IO].take(100)
-    val run: Stream[IO, Unit]            = stream.parEvalMapUnordered(workerCount)(t => t.execute)
-    val ticks                            = fs2.Stream.every[IO](1.second)
-    val completed: Stream[IO, Unit]      = run.filter(x => true) // TODO check is completed
+    val run: Stream[IO, Result]            = stream.parEvalMapUnordered(workerCount)(t => t.execute.map(Result.apply))
+    val events: fs2.Stream[IO, Event] = (run ++ Stream(Tick)).mergeHaltL(fs2.Stream.awakeEvery[IO](1.second).map(_ => Tick))
 
-    val zipped: Stream[IO, (Unit, Boolean)] = run.zip(ticks)
-    val checker: Stream[IO, (Int, Int)] = zipped
-      .scan((0, 0)) {
-        case ((x, count), (n, true)) =>
-          Logger[F].info("Logging Start Something")
-
-          // todo output value to screen
-          (x, count + 1)
-        case ((x, count), (n, y)) => (x, count + 1) // emit elements and increment counter
-      }.map(_._2)
-
-    checker
+    events
+      .scan[Count](Partial(0)) {
+        case (count, Tick) => Completed(count.int)
+        case (count, result: Result) => Partial(count.int + 1)
+      }
+      .collect { case Completed(count) => count }
+      .evalTap(c => print(s"Completed count: $c"))
   }
 }

@@ -1,38 +1,37 @@
 package tjl
 
-import cats.effect.IOApp
-import cats.effect.IO
-
-import scala.concurrent.duration.*
+import cats.effect.{ExitCode, IO, IOApp, Sync}
 import cats.implicits.*
 import tjl.*
 import fs2.*
 import cats.effect.IO
-import fs2._
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
+import fs2.*
+
+import scala.concurrent.duration.*
+import cats.implicits.*
+import cats.*
+import cats.*
+import cats.data.*
+import cats.implicits.*
+import org.typelevel.log4cats.Logger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
+
+import java.util.concurrent.{ExecutorService, Executors}
+import scala.concurrent.ExecutionContext
 
 object Main extends IOApp.Simple {
 
-  val timeout = 30.seconds
-  val workers = 50
+  val loggingEc: ExecutionContext = ExecutionContext.fromExecutor(Executors.newWorkStealingPool())
+  val timeout                     = 30.seconds
+  val workers                     = 50
 
   def run: IO[Unit] = {
-    val tasks: Seq[TaskImpl[IO]] = (0 to 50).map(_ => TaskImpl[IO]())
-    IO(program(tasks, timeout, workers))
-  }
-
-  def program(
-      tasks: Seq[TaskImpl[IO]],
-      timeout: FiniteDuration,
-      workers: Int,
-  ): Unit = {
     for {
-      t <- tasks.map(t => t.execute)
-      //_ <- IO.sleep(1.seconds)
-      //_ <- IO(t.map(x => x))
-    } yield ()
-
+      logger <- Slf4jLogger.create[IO]
+      _      <- logger.warn("Logging start")
+      s = new Streaming[IO](loggingEc).stream
+      x <- s.compile.drain
+    } yield ExitCode.Success
   }
 
 }
