@@ -15,18 +15,15 @@ import scala.concurrent.duration.*
 import org.typelevel.log4cats.{Logger, SelfAwareStructuredLogger}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import cats.effect.kernel.Sync
+import Streaming._
 
-
-trait LazyLogging[F[_]: Sync](lc: ExecutionContext) {
+trait LazyLogging[F[_]: Sync] {
   val logger = LoggerFactory.getLogger(getClass)
 
-  def print(str: String): IO[Unit] = IO(println(str)).evalOn(lc)
+  def print(str: String): IO[Unit] = IO.blocking(println(str))
 }
 
-class Streaming[F[_]: Sync](lc: ExecutionContext) extends LazyLogging[F](lc) {
-
-  val workerCount = 20
-
+object Streaming {
   sealed trait Event
   case class Result(value: String) extends Event
   case object Tick extends Event
@@ -36,9 +33,12 @@ class Streaming[F[_]: Sync](lc: ExecutionContext) extends LazyLogging[F](lc) {
   }
   case class Completed(int: Int) extends Count
   case class Partial(int: Int) extends Count
+}
+
+class Streaming[F[_]: Sync] extends LazyLogging[F] {
+  val workerCount = 20
 
   def stream: Stream[IO, Int] = {
-
     def task = TaskImpl[IO]()
 
     val stream: Stream[IO, Task[IO]] = Stream.constant(task).covary[IO].take(100)

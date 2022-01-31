@@ -21,15 +21,14 @@ import scala.concurrent.ExecutionContext
 
 object Main extends IOApp.Simple {
 
-  val loggingEc: ExecutionContext = ExecutionContext.fromExecutor(Executors.newWorkStealingPool())
-  val timeout                     = 30.seconds
-  val workers                     = 50
+  val timeout = 30.seconds
+  val workers = 50
 
   def run: IO[Unit] = {
     for {
       logger <- Slf4jLogger.create[IO]
       _      <- logger.warn("Logging start")
-      s = new Streaming[IO](loggingEc).stream
+      s = new Streaming[IO].stream
       x <- s.compile.drain
     } yield ExitCode.Success
   }

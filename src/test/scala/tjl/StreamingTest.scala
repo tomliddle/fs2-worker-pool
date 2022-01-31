@@ -13,13 +13,11 @@ class StreamingTest extends UnitSpec {
 
   val ec = ExecutionContext.Implicits.global
 
-  "A Stack" should "pop values in last-in-first-out order" in {
+  "A fs2 worker pool" should "" in {
 
-    val s = new Streaming[IO](ec)
+    val s = new Streaming[IO]
 
     s.stream.compile.drain
-
   }
 
-  it should "throw NoSuchElementException if an empty stack is popped" in {}
 }
